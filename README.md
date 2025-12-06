@@ -1,6 +1,6 @@
 # VintaSoft Console eSCL Image Scanning Demo
 
-This .NET console project uses <a href="https://www.vintasoft.com/vstwain-dotnet-index.html">VintaSoft TWAIN .NET SDK</a> and demonstrates how to acquire images from eSCL image scanner in console application.
+This .NET console project uses <a href="https://www.vintasoft.com/vstwain-dotnet-index.html">VintaSoft TWAIN .NET SDK</a> and demonstrates how to acquire images from eSCL image scanner in console application in Windows and Linux.
 
 
 ## Usage
