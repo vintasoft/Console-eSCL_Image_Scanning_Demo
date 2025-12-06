@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("VintaSoft TWAIN Console Demo")]
-[assembly: AssemblyDescription("TWAIN console demo")]
+[assembly: AssemblyTitle("VintaSoft eSCL Image Scanning Console Demo")]
+[assembly: AssemblyDescription("Console demo that allows to scan images from eSCL devices.")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("VintaSoft LLC")]
-[assembly: AssemblyProduct("TwainConsoleDemo")]
+[assembly: AssemblyProduct("EsclImageScanningConsoleDemo")]
 [assembly: AssemblyCopyright("Copyright VintaSoft LLC 2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

@@ -1,10 +1,6 @@
-# VintaSoft Console TWAIN Simple Demo
+# VintaSoft Console eSCL Image Scanning Demo
 
-This .NET console project uses <a href="https://www.vintasoft.com/vstwain-dotnet-index.html">VintaSoft TWAIN .NET SDK</a> and demonstrates how to acquire images from TWAIN scanner in console application.
-
-
-## Screenshot
-<img src="vintasoft-twain-console-demo.png" title="VintaSoft TWAIN Console Demo">
+This .NET console project uses <a href="https://www.vintasoft.com/vstwain-dotnet-index.html">VintaSoft TWAIN .NET SDK</a> and demonstrates how to acquire images from eSCL image scanner in console application.
 
 
 ## Usage
@@ -12,12 +8,12 @@ This .NET console project uses <a href="https://www.vintasoft.com/vstwain-dotnet
 
 2. Update the evaluation license in "CSharp\Program.cs" file:
    ```
-   Vintasoft.Twain.TwainGlobalSettings.Register("REG_USER", "REG_EMAIL", "EXPIRATION_DATE", "REG_CODE");
+   Vintasoft.EsclImageScanning.EsclGlobalSettings.Register("REG_USER", "REG_EMAIL", "EXPIRATION_DATE", "REG_CODE");
    ```
 
-3. Build the project ("TwainConsoleDemo.Net10.csproj" file) in Visual Studio or using .NET CLI:
+3. Build the project ("EsclImageScanningConsoleDemo.Net10.csproj" file) in Visual Studio or using .NET CLI:
    ```
-   dotnet build TwainConsoleDemo.Net10.csproj
+   dotnet build EsclImageScanningConsoleDemo.Net10.csproj
    ```
 
 4. Run compiled application.

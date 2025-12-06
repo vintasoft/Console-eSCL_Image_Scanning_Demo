@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<AssemblyName>EsclImageScanningConsoleDemo</AssemblyName>
+
+		<GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+		<GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+		<GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+		<GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+		<GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
+		<GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+		<GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
+
+		<EnableDefaultItems>false</EnableDefaultItems>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<OutputPath>bin\</OutputPath>
+		<Prefer32Bit>false</Prefer32Bit>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<OutputPath>bin\</OutputPath>
+		<Prefer32Bit>false</Prefer32Bit>
+	</PropertyGroup>
+
+	  <ItemGroup>
+		<PackageReference Include="Vintasoft.Shared" Version="4.6.1.1" />
+		<PackageReference Include="Vintasoft.EsclImageScanning" Version="15.3.3.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="Program.cs" />
+		<Compile Include="Properties\AssemblyInfo.cs" />
+	</ItemGroup>
+
+</Project>

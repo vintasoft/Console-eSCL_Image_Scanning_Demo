@@ -1,329 +1,421 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
+using Vintasoft.EsclImageScanning;
 
-using Vintasoft.Twain;
-
-namespace TwainConsoleDemo
+namespace EsclImageScanningConsoleDemo
 {
-    class Program
+    public class Program
     {
 
-        static void Main(string[] args)
+        static int _currentProgressStep = 0;
+
+
+
+        public static int Main(string[] args)
         {
             try
             {
-                // create TWAIN device manager
-                using (DeviceManager deviceManager = new DeviceManager())
+                //EsclEnvironment.EnableDebugging("escl.log");
+
+                // create eSCL device manager
+                using (EsclDeviceManager deviceManager = new EsclDeviceManager())
                 {
-                    // open TWAIN device manager
-                    if (!OpenDeviceManager(deviceManager))
-                        return;
+                    // open eSCL device manager
+                    deviceManager.Open();
 
-                    // select TWAIN device
-                    Device device = SelectDevice(deviceManager);
-                    // if device is not selected
-                    if (device == null)
-                        return;
-
-                    // specify that device UI should not be shown
-                    device.ShowUI = false;
-                    // specify that image scanning progess UI should not be shown
-                    device.ShowIndicators = false;
-                    // specify that device must be disabled after image scan
-                    device.DisableAfterAcquire = true;
-
-                    // open the device
-                    device.Open();
-
-                    // set device parameters
-                    device.TransferMode = TransferMode.Native;
-                    device.PixelType = PixelType.BW;
-                    device.XferCount = 1;
-
-                    // create directory for TIFF file
-                    string directoryForImages = Path.GetDirectoryName(Directory.GetCurrentDirectory());
-                    directoryForImages = Path.Combine(directoryForImages, "Images");
-                    if (!Directory.Exists(directoryForImages))
-                        Directory.CreateDirectory(directoryForImages);
-
-                    string multipageTiffFilename = Path.Combine(directoryForImages, "multipage.tif");
-
-                    // acquire image(s) from the device
-                    int imageIndex = 0;
-                    AcquireModalState acquireModalState = AcquireModalState.None;
-                    do
+                    Console.WriteLine(string.Format("Searching for eSCL devices in network during {0} seconds... Press 'Enter' key to stop searching.", deviceManager.DeviceSearchTimeout / 1000));
+                    DateTime startTime = DateTime.Now;
+                    while (DateTime.Now.Subtract(startTime).TotalMilliseconds < deviceManager.DeviceSearchTimeout)
                     {
-                        acquireModalState = device.AcquireModal();
-                        switch (acquireModalState)
+                        Thread.Sleep(10);
+                        if (Console.KeyAvailable)
                         {
-                            case AcquireModalState.ImageAcquired:
-                                // save acquired image to a file
-                                device.AcquiredImage.Save(multipageTiffFilename);
-                                // dispose an acquired image
-                                device.AcquiredImage.Dispose();
-
-                                Console.WriteLine(string.Format("Image{0} is saved.", imageIndex++));
-                                break;
-
-                            case AcquireModalState.ScanCompleted:
-                                Console.WriteLine("Scan is completed.");
-                                break;
-
-                            case AcquireModalState.ScanCanceled:
-                                Console.WriteLine("Scan is canceled.");
-                                break;
-
-                            case AcquireModalState.ScanFailed:
-                                Console.WriteLine(string.Format("Scan is failed: {0}", device.ErrorString));
-                                break;
-
-                            case AcquireModalState.UserInterfaceClosed:
-                                Console.WriteLine("User interface is closed.");
-                                break;
+                            if (Console.ReadKey().KeyChar == 13)
+                            {
+                                Console.WriteLine("Searching is canceled.");
+                                return -1;
+                            }
                         }
+                        ShowNextProgressIndicator();
                     }
-                    while (acquireModalState != AcquireModalState.None);
+                    Console.WriteLine();
 
-                    // close the device
-                    device.Close();
+                    // get count of eSCL devices
+                    int deviceCount = deviceManager.Devices.Count;
+                    // if eSCL devices are not found
+                    if (deviceCount == 0)
+                    {
+                        Console.WriteLine("Devices are not found.");
+                        return -2;
+                    }
 
-                    // close the device manager
+                    // select eSCL device
+                    int deviceIndex = SelectDevice(deviceManager);
+                    // if device is not selected
+                    if (deviceIndex == 0)
+                        return -3;
+
+                    // get selected eSCL device
+                    EsclDevice device = deviceManager.Devices[deviceIndex - 1];
+                    if (device != null)
+                    {
+                        // open eSCL device
+                        device.Open();
+
+                        // select the scan input source for device
+                        SelectDeviceScanInputSource(device);
+
+                        // select the scan intent for eSCL device
+                        string scanIntent = SelectEsclScanIntent(device);
+                        // if scan intent is selected
+                        if (scanIntent != null)
+                            // set the scan intent for eSCL device
+                            device.ScanIntent = scanIntent;
+
+                        // select the scan color mode for eSCL device
+                        EsclScanColorMode? scanColorMode = SelectEsclScanColorMode(device);
+                        // if scan color mode is selected
+                        if (scanColorMode != null)
+                            // set the scan color mode for eSCL device
+                            device.ScanColorMode = scanColorMode.Value;
+
+                        // select the scan resolution for eSCL device
+                        int? scanXResolution = SelectEsclScanResolution(device);
+                        // if scan resolution is selected
+                        if (scanXResolution != null)
+                        {
+                            // set the scan resolution for eSCL device
+                            device.ScanXResolution = scanXResolution.Value;
+                            device.ScanYResolution = scanXResolution.Value;
+                        }
+
+                        EsclScanDocumentFormatExt scanDocumentFormatExt = SelectEsclScanDocumentFormatExt(device);
+
+                        Console.WriteLine("Images acquisition is started...");
+                        int imageIndex = 0;
+                        // if device should return image in raw format
+                        if (scanDocumentFormatExt == EsclScanDocumentFormatExt.OctetStream)
+                        {
+                            EsclAcquiredImage acquiredImage = null;
+                            do
+                            {
+                                try
+                                {
+                                    // acquire image from eSCL device
+                                    acquiredImage = device.AcquireImageSync();
+                                    // if image is acquired
+                                    if (acquiredImage != null)
+                                    {
+                                        Console.WriteLine("Image is acquired.");
+
+                                        string filename = string.Format("scannedImage{0}.jpg", imageIndex);
+                                        if (File.Exists(filename))
+                                            File.Delete(filename);
+
+                                        // save acquired image to a file
+                                        acquiredImage.Save(filename);
+
+                                        Console.WriteLine(string.Format("Image{0} is saved.", imageIndex++));
+                                    }
+                                    // if image is not acquired
+                                    else
+                                    {
+                                        Console.WriteLine("Scan is completed.");
+                                        break;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(string.Format("Scan is failed: {0}", ex.Message));
+                                    break;
+                                }
+                            }
+                            while (acquiredImage != null);
+                        }
+                        // if device should return image as image file (JPEG or PDF)
+                        else
+                        {
+                            byte[] acquiredImageBytes = null;
+                            do
+                            {
+                                try
+                                {
+                                    // acquire image bytes from eSCL device
+                                    acquiredImageBytes = device.AcquireImageSyncAsFileStream(scanDocumentFormatExt);
+                                    // if image is acquired
+                                    if (acquiredImageBytes != null)
+                                    {
+                                        Console.WriteLine("Image is acquired.");
+
+                                        string filename = string.Format("scannedImage{0}", imageIndex);
+                                        if (scanDocumentFormatExt == EsclScanDocumentFormatExt.PDF)
+                                            filename += ".pdf";
+                                        else
+                                            filename += ".jpg";
+                                        if (File.Exists(filename))
+                                            File.Delete(filename);
+
+                                        // save image bytes to a file
+                                        File.WriteAllBytes(filename, acquiredImageBytes);
+
+                                        Console.WriteLine(string.Format("Image{0} is saved.", imageIndex++));
+                                    }
+                                    // if image is not acquired
+                                    else
+                                    {
+                                        Console.WriteLine("Scan is completed.");
+                                        break;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(string.Format("Scan is failed: {0}", ex.Message));
+                                    break;
+                                }
+                            }
+                            while (acquiredImageBytes != null);
+                        }
+
+                        // close eSCL device
+                        device.Close();
+                    }
+
+                    // close eSCL device manager
                     deviceManager.Close();
                 }
+
+                return 0;
             }
-            catch (TwainException ex)
+            catch (Exception ex)
             {
                 Console.WriteLine("Error: " + GetFullExceptionMessage(ex));
+                return -1000;
             }
-            catch (Exception e)
-            {
-                System.ComponentModel.LicenseException licenseException = GetLicenseException(e);
-                if (licenseException != null)
-                {
-                    // show information about licensing exception
-                    Console.WriteLine("{0}: {1}", licenseException.GetType().Name, licenseException.Message);
-
-                    // open article with information about usage of evaluation license
-                    System.Diagnostics.Process process = new System.Diagnostics.Process();
-                    process.StartInfo.FileName = "https://www.vintasoft.com/docs/vstwain-dotnet/Licensing-Twain-Evaluation.html";
-                    process.StartInfo.UseShellExecute = true;
-                    process.Start();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            Console.WriteLine("Press any key to continue...");
-            Console.ReadKey();
         }
 
         /// <summary>
-        /// Opens the TWAIN device manager.
+        /// Selects eSCL device.
         /// </summary>
-        /// <param name="deviceManager">Device manager.</param>
-        /// <returns><b>True</b> - device manager is opened successfully; otherwise, <b>false</b>.</returns>
-        private static bool OpenDeviceManager(DeviceManager deviceManager)
-        {
-            // 0 - 32-bit TWAIN1 device manager; 1 - 32-bit TWAIN2 device manager; 2 - 64-bit TWAIN2 device manager.
-            int twainDeviceManagerType = -1;
-
-            char key;
-            // if application is running on 32-bit Windows
-            if (IntPtr.Size == 4)
-            {
-                Console.Write("Do you want to use 32-bit TWAIN1 device manager (press '1') or 32-bit TWAIN2 device manager (press '2')? ");
-                do
-                {
-                    key = Console.ReadKey().KeyChar;
-                }
-                while (key != '1' && key != '2');
-                if (key == '1')
-                    twainDeviceManagerType = 0;
-                else
-                    twainDeviceManagerType = 1;
-            }
-            // if application is running on 64-bit Windows or Linux
-            else
-            {
-                // if application is running on 64-bit Windows
-                if (TwainEnvironment.OsPlatform == OsPlatform.Windows)
-                {
-                    Console.Write("Do you want to use 32-bit TWAIN2 device manager (press '1') or 64-bit TWAIN2 device manager (press '2')? ");
-                    do
-                    {
-                        key = Console.ReadKey().KeyChar;
-                    }
-                    while (key != '1' && key != '2');
-                    if (key == '1')
-                        twainDeviceManagerType = 1;
-                    else
-                        twainDeviceManagerType = 2;
-                }
-                // if application is running on 64-bit Linux
-                else
-                {
-                    twainDeviceManagerType = 2;
-                }
-            }
-
-            string twainDsmDllCustomPath;
-            switch (twainDeviceManagerType)
-            {
-                case 0:
-                    // try to use 32-bit TWAIN1 device manager
-                    deviceManager.IsTwain2Compatible = false;
-                    break;
-
-                case 1:
-                    // get path to the TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK
-                    twainDsmDllCustomPath = GetTwainDsmCustomPath(true);
-                    // if file exist
-                    if (twainDsmDllCustomPath != null)
-                        // specify that SDK should use TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK
-                        deviceManager.TwainDllPath = twainDsmDllCustomPath;
-
-                    deviceManager.IsTwain2Compatible = true;
-
-                    // if application is running on 64-bit Windows
-                    if (IntPtr.Size == 8)
-                    { 
-                        deviceManager.Use32BitDevices();
-                    }
-                    break;
-
-                case 2:
-                    // get path to the TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK
-                    twainDsmDllCustomPath = GetTwainDsmCustomPath(false);
-                    // if file exist
-                    if (twainDsmDllCustomPath != null)
-                        // specify that SDK should use TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK
-                        deviceManager.TwainDllPath = twainDsmDllCustomPath;
-
-                    // try to use 64-bit TWAIN2 device manager
-                    deviceManager.IsTwain2Compatible = true;
-                    break;
-            }
-
-            // if TWAIN device manager is not available
-            if (!deviceManager.IsTwainAvailable)
-            {
-                Console.WriteLine("TWAIN device manager is not available.");
-                return false;
-            }
-
-            // open the device manager
-            deviceManager.Open();
-
-            return true;
-        }
-
-        /// <summary>
-        /// Selects the TWAIN device.
-        /// </summary>
-        /// <param name="deviceManager">TWAIN device manager.</param>
-        /// <returns>TWAIN device if device is selected; otherwiase, <b>null</b>.</returns>
-        private static Device SelectDevice(DeviceManager deviceManager)
+        /// <param name="deviceManager">eSCL device manager.</param>
+        /// <returns>0 - device is not selected; N - index of selected eSCL device.</returns>
+        private static int SelectDevice(EsclDeviceManager deviceManager)
         {
             int deviceCount = deviceManager.Devices.Count;
-            // if no devices are found in the system
-            if (deviceCount == 0)
-            {
-                Console.WriteLine("Devices are not found.");
-                return null;
-            }
 
             Console.WriteLine("Device list:");
             for (int i = 0; i < deviceCount; i++)
             {
-                Console.WriteLine(string.Format("{0}. {1}", i + 1, deviceManager.Devices[i].Info.ProductName));
+                EsclDevice device = deviceManager.Devices[i];
+                Console.WriteLine(string.Format("{0}. {1} ({2})", i + 1, device.Name, device.HostUrl));
             }
 
             int deviceIndex = -1;
             while (deviceIndex < 0 || deviceIndex > deviceCount)
             {
-                Console.Write(string.Format("Please select device by entering the device number from '1' to '{0}' ('0' to cancel) and press 'Enter' key: ", deviceCount));
-                string deviceIndexString = Console.ReadLine();
-                int.TryParse(deviceIndexString, out deviceIndex);
+                Console.Write(string.Format("Please select device by entering the device number from '1' to '{0}' or press '0' to cancel: ", deviceCount));
+                deviceIndex = Console.ReadKey().KeyChar - '0';
+                Console.WriteLine();
             }
             Console.WriteLine();
 
-            if (deviceIndex == 0)
-                return null;
-
-            return deviceManager.Devices[deviceIndex - 1];
+            return deviceIndex;
         }
 
         /// <summary>
-        /// Returns message that contains information about exception and inner exceptions.
+        /// Selects the scan input source for WIA device.
+        /// </summary>
+        /// <param name="device">WIA device.</param>
+        private static void SelectDeviceScanInputSource(EsclDevice device)
+        {
+            // if device has flatbed and feeder
+            if (device.HasFlatbed && device.HasFeeder)
+            {
+                if (device.HasDuplex)
+                    Console.Write("Device has flatbed and feeder with duplex.");
+                else
+                    Console.Write("Device has flatbed and feeder without duplex.");
+
+                if (device.IsFeederEnabled)
+                    Console.WriteLine(" Now device uses feeder.");
+                else
+                    Console.WriteLine(" Now device uses flatbed.");
+
+
+                // ask user to select flatbed or feeder
+
+                int scanInputSourceIndex = -1;
+                while (scanInputSourceIndex != 1 && scanInputSourceIndex != 2)
+                {
+                    Console.Write("What do you want to use: flatbed (press '1') or feeder (press '2'): ");
+                    scanInputSourceIndex = Console.ReadKey().KeyChar - '0';
+                    Console.WriteLine();
+                }
+                Console.WriteLine();
+
+                if (scanInputSourceIndex == 1)
+                    device.IsFlatbedEnabled = true;
+                else
+                    device.IsFeederEnabled = true;
+            }
+            // if device has feeder only
+            else if (!device.HasFlatbed && device.HasFeeder)
+            {
+                if (device.HasDuplex)
+                    Console.WriteLine("Device has feeder with duplex.");
+                else
+                    Console.WriteLine("Device has feeder without duplex.");
+                Console.WriteLine();
+            }
+            // if device has flatbed only
+            else if (device.HasFlatbed && !device.HasFeeder)
+            {
+                Console.WriteLine("Device has flatbed only.");
+                Console.WriteLine();
+            }
+        }
+
+        /// <summary>
+        /// Selects the scan intent for eSCL device.
+        /// </summary>
+        /// <param name="device">eSCL device.</param>
+        /// <returns>null - scan intent is not selected; otherwise, selectes scan intent.</returns>
+        private static string SelectEsclScanIntent(EsclDevice device)
+        {
+            string[] supportedScanIntents = device.GetSupportedScanIntents();
+            Console.WriteLine("Scan intents:");
+            for (int i = 0; i < supportedScanIntents.Length; i++)
+            {
+                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanIntents[i]));
+            }
+
+            int scanIntentIndex = -1;
+            while (scanIntentIndex < 0 || scanIntentIndex > supportedScanIntents.Length)
+            {
+                Console.Write(string.Format("Please select scan intent by entering the number from '1' to '{0}' or press '0' to cancel: ", supportedScanIntents.Length));
+                scanIntentIndex = Console.ReadKey().KeyChar - '0';
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+
+            if (scanIntentIndex == 0)
+                return null;
+
+            return supportedScanIntents[scanIntentIndex - 1];
+        }
+
+        /// <summary>
+        /// Selects the scan color mode for eSCL device.
+        /// </summary>
+        /// <param name="device">eSCL device.</param>
+        /// <returns>null - scan color mode is not selected; otherwise, selectes scan color mode.</returns>
+        private static EsclScanColorMode? SelectEsclScanColorMode(EsclDevice device)
+        {
+            EsclScanColorMode[] supportedScanColorModes = device.GetSupportedScanColorModes();
+            Console.WriteLine("Scan color modes:");
+            for (int i = 0; i < supportedScanColorModes.Length; i++)
+            {
+                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanColorModes[i]));
+            }
+
+            int scanColorModeIndex = -1;
+            while (scanColorModeIndex < 0 || scanColorModeIndex > supportedScanColorModes.Length)
+            {
+                Console.Write(string.Format("Please select scan color mode by entering the number from '1' to '{0}' or press '0' to cancel: ", supportedScanColorModes.Length));
+                scanColorModeIndex = Console.ReadKey().KeyChar - '0';
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+
+            if (scanColorModeIndex == 0)
+                return null;
+
+            return supportedScanColorModes[scanColorModeIndex - 1];
+        }
+
+        /// <summary>
+        /// Selects the scan resolution for eSCL device.
+        /// </summary>
+        /// <param name="device">eSCL device.</param>
+        /// <returns>null - scan resolution is not selected; otherwise, selectes scan resolution.</returns>
+        private static int? SelectEsclScanResolution(EsclDevice device)
+        {
+            int[] supportedScanResolutions = device.GetSupportedScanXResolutions();
+            Console.WriteLine("Scan resolutions:");
+            for (int i = 0; i < supportedScanResolutions.Length; i++)
+            {
+                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanResolutions[i]));
+            }
+
+            int scanResolutionIndex = -1;
+            while (scanResolutionIndex < 0 || scanResolutionIndex > supportedScanResolutions.Length)
+            {
+                Console.Write(string.Format("Please select scan resolution by entering the number from '1' to '{0}' or press '0' to cancel: ", supportedScanResolutions.Length));
+                scanResolutionIndex = Console.ReadKey().KeyChar - '0';
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+
+            if (scanResolutionIndex == 0)
+                return null;
+
+            return supportedScanResolutions[scanResolutionIndex - 1];
+        }
+
+        /// <summary>
+        /// Selects the extended scan document format for eSCL device.
+        /// </summary>
+        /// <param name="device">eSCL device.</param>
+        /// <returns>null - extended scan document format is not selected; otherwise, selectes extended scan document format.</returns>
+        private static EsclScanDocumentFormatExt SelectEsclScanDocumentFormatExt(EsclDevice device)
+        {
+            EsclScanDocumentFormatExt[] supportedScanDocumentFormatsExt = device.GetSupportedScanDocumentFormatsExt();
+            Console.WriteLine("Scan document formats:");
+            for (int i = 0; i < supportedScanDocumentFormatsExt.Length; i++)
+            {
+                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanDocumentFormatsExt[i]));
+            }
+
+            int scanDocumentFormatIndex = -1;
+            while (scanDocumentFormatIndex < 1 || scanDocumentFormatIndex > supportedScanDocumentFormatsExt.Length)
+            {
+                Console.Write(string.Format("Please select scan document format by entering the number from '1' to '{0}': ", supportedScanDocumentFormatsExt.Length));
+                scanDocumentFormatIndex = Console.ReadKey().KeyChar - '0';
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+
+            return supportedScanDocumentFormatsExt[scanDocumentFormatIndex - 1];
+
+        }
+        /// <summary>
+        /// Shows next progress indicator.
+        /// </summary>
+        private static void ShowNextProgressIndicator()
+        {
+            string progressStepChars = @"\|/-";
+            Console.Write((char)8);
+            Console.Write(progressStepChars[_currentProgressStep]);
+
+            _currentProgressStep++;
+            if (_currentProgressStep == 4)
+                _currentProgressStep = 0;
+        }
+
+        /// <summary>
+        /// Returns full exception message.
         /// </summary>
         private static string GetFullExceptionMessage(Exception ex)
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.AppendLine(ex.Message);
-
             Exception innerException = ex.InnerException;
             while (innerException != null)
             {
-                if (ex.Message != innerException.Message)
-                    sb.AppendLine(string.Format("Inner exception: {0}", innerException.Message));
+                sb.AppendLine(string.Format("Inner exception: {0}", innerException.Message));
                 innerException = innerException.InnerException;
             }
-
             return sb.ToString();
-        }
-
-        /// <summary>
-        /// Returns the license exception from specified exception.
-        /// </summary>
-        /// <param name="exceptionObject">The exception object.</param>
-        /// <returns>Instance of <see cref="LicenseException"/>.</returns>
-        private static System.ComponentModel.LicenseException GetLicenseException(object exceptionObject)
-        {
-            Exception ex = exceptionObject as Exception;
-            if (ex == null)
-                return null;
-            if (ex is System.ComponentModel.LicenseException)
-                return (System.ComponentModel.LicenseException)exceptionObject;
-            if (ex.InnerException != null)
-                return GetLicenseException(ex.InnerException);
-            return null;
-        }
-
-        /// <summary>
-        /// Returns path to the TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK.
-        /// </summary>
-        /// <param name="use32BitDevice">The value indicating whether the 32-bit TWAIN device must be used.</param>
-        /// <returns>The path to the TWAIN device manager 2.x from installation of VintaSoft TWAIN .NET SDK.</returns>
-        private static string GetTwainDsmCustomPath(bool use32BitDevice)
-        {
-            string twainFolderName = "TWAINDSM64";
-            if (use32BitDevice)
-                twainFolderName = "TWAINDSM32";
-
-            string[] binFolderPaths = { @"..\..\Bin", @"..\..\..\..\..\Bin", @"..\..\..\..\..\..\Bin" };
-            string binFolderPath = null;
-            for (int i = 0; i < binFolderPaths.Length; i++)
-            {
-                if (Directory.Exists(Path.Combine(binFolderPaths[i], twainFolderName)))
-                {
-                    binFolderPath = binFolderPaths[i];
-                    break;
-                }
-            }
-
-            if (binFolderPath != null)
-            {
-                if (use32BitDevice)
-                    // get path to the TWAIN device manager 2.x (32-bit) from installation of VintaSoft TWAIN .NET SDK
-                    return Path.Combine(binFolderPath, "TWAINDSM32", "TWAINDSM.DLL");
-                else
-                    // get path to the TWAIN device manager 2.x (64-bit) from installation of VintaSoft TWAIN .NET SDK
-                    return Path.Combine(binFolderPath, "TWAINDSM64", "TWAINDSM.DLL");
-            }
-
-            return null;
         }
 
     }
