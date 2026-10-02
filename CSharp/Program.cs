@@ -21,6 +21,9 @@ namespace EsclImageScanningConsoleDemo
                 // create eSCL device manager
                 using (EsclDeviceManager deviceManager = new EsclDeviceManager())
                 {
+                    // eSCL device should ignore not valid SSL certificate for SSL connection because most of eSCL devices have self-signed certificate
+                    deviceManager.IgnoreNotVaidSslCertificateError = true;
+
                     // open eSCL device manager
                     deviceManager.Open();
 
@@ -90,12 +93,12 @@ namespace EsclImageScanningConsoleDemo
                             device.ScanYResolution = scanXResolution.Value;
                         }
 
-                        EsclScanDocumentFormatExt scanDocumentFormatExt = SelectEsclScanDocumentFormatExt(device);
+                        EsclScanDocumentFormat scanDocumentFormatExt = SelectEsclScanDocumentFormat(device);
 
                         Console.WriteLine("Images acquisition is started...");
                         int imageIndex = 0;
                         // if device should return image in raw format
-                        if (scanDocumentFormatExt == EsclScanDocumentFormatExt.OctetStream)
+                        if (scanDocumentFormatExt == EsclScanDocumentFormat.OctetStream)
                         {
                             EsclAcquiredImage acquiredImage = null;
                             do
@@ -149,7 +152,7 @@ namespace EsclImageScanningConsoleDemo
                                         Console.WriteLine("Image is acquired.");
 
                                         string filename = string.Format("scannedImage{0}", imageIndex);
-                                        if (scanDocumentFormatExt == EsclScanDocumentFormatExt.PDF)
+                                        if (scanDocumentFormatExt == EsclScanDocumentFormat.PDF)
                                             filename += ".pdf";
                                         else
                                             filename += ".jpg";
@@ -279,7 +282,7 @@ namespace EsclImageScanningConsoleDemo
         /// Selects the scan intent for eSCL device.
         /// </summary>
         /// <param name="device">eSCL device.</param>
-        /// <returns>null - scan intent is not selected; otherwise, selectes scan intent.</returns>
+        /// <returns>null if scan intent is not selected; otherwise, selected scan intent.</returns>
         private static string SelectEsclScanIntent(EsclDevice device)
         {
             string[] supportedScanIntents = device.GetSupportedScanIntents();
@@ -308,7 +311,7 @@ namespace EsclImageScanningConsoleDemo
         /// Selects the scan color mode for eSCL device.
         /// </summary>
         /// <param name="device">eSCL device.</param>
-        /// <returns>null - scan color mode is not selected; otherwise, selectes scan color mode.</returns>
+        /// <returns>null if scan color mode is not selected; otherwise, selected scan color mode.</returns>
         private static EsclScanColorMode? SelectEsclScanColorMode(EsclDevice device)
         {
             EsclScanColorMode[] supportedScanColorModes = device.GetSupportedScanColorModes();
@@ -337,7 +340,7 @@ namespace EsclImageScanningConsoleDemo
         /// Selects the scan resolution for eSCL device.
         /// </summary>
         /// <param name="device">eSCL device.</param>
-        /// <returns>null - scan resolution is not selected; otherwise, selectes scan resolution.</returns>
+        /// <returns>null if scan resolution is not selected; otherwise, selected scan resolution.</returns>
         private static int? SelectEsclScanResolution(EsclDevice device)
         {
             int[] supportedScanResolutions = device.GetSupportedScanXResolutions();
@@ -363,29 +366,31 @@ namespace EsclImageScanningConsoleDemo
         }
 
         /// <summary>
-        /// Selects the extended scan document format for eSCL device.
+        /// Selects the scan document format for eSCL device.
         /// </summary>
         /// <param name="device">eSCL device.</param>
-        /// <returns>null - extended scan document format is not selected; otherwise, selectes extended scan document format.</returns>
-        private static EsclScanDocumentFormatExt SelectEsclScanDocumentFormatExt(EsclDevice device)
+        /// <returns>null if scan document format is not selected; otherwise, selected scan document format.</returns>
+        private static EsclScanDocumentFormat SelectEsclScanDocumentFormat(EsclDevice device)
         {
-            EsclScanDocumentFormatExt[] supportedScanDocumentFormatsExt = device.GetSupportedScanDocumentFormatsExt();
+            EsclScanDocumentFormat[] supportedScanDocumentFormats = device.GetSupportedScanDocumentFormatsExt();
+            if (supportedScanDocumentFormats.Length == 0)
+                supportedScanDocumentFormats = device.GetSupportedScanDocumentFormats();
             Console.WriteLine("Scan document formats:");
-            for (int i = 0; i < supportedScanDocumentFormatsExt.Length; i++)
+            for (int i = 0; i < supportedScanDocumentFormats.Length; i++)
             {
-                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanDocumentFormatsExt[i]));
+                Console.WriteLine(string.Format("{0}. {1}", i + 1, supportedScanDocumentFormats[i]));
             }
 
             int scanDocumentFormatIndex = -1;
-            while (scanDocumentFormatIndex < 1 || scanDocumentFormatIndex > supportedScanDocumentFormatsExt.Length)
+            while (scanDocumentFormatIndex < 1 || scanDocumentFormatIndex > supportedScanDocumentFormats.Length)
             {
-                Console.Write(string.Format("Please select scan document format by entering the number from '1' to '{0}': ", supportedScanDocumentFormatsExt.Length));
+                Console.Write(string.Format("Please select scan document format by entering the number from '1' to '{0}': ", supportedScanDocumentFormats.Length));
                 scanDocumentFormatIndex = Console.ReadKey().KeyChar - '0';
                 Console.WriteLine();
             }
             Console.WriteLine();
 
-            return supportedScanDocumentFormatsExt[scanDocumentFormatIndex - 1];
+            return supportedScanDocumentFormats[scanDocumentFormatIndex - 1];
 
         }
         /// <summary>
