@@ -14,6 +14,9 @@ namespace EsclImageScanningConsoleDemo
 
         public static int Main(string[] args)
         {
+            // register the evaluation license for VintaSoft Twain .NET SDK
+            Vintasoft.EsclImageScanning.EsclGlobalSettings.Register("REG_USER", "REG_EMAIL", "EXPIRATION_DATE", "REG_CODE");
+
             try
             {
                 //EsclEnvironment.EnableDebugging("escl.log");
